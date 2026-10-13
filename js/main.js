@@ -10,6 +10,8 @@
   let viewHeight = 0;
   let lastTime = 0;
   let state = null;
+  let scoreEl = null;
+  let lastScore = -1;
 
   // Настроить размер canvas под окно с учётом devicePixelRatio.
   function resizeCanvas() {
@@ -37,8 +39,32 @@
 
   function render() {
     ctx.clearRect(0, 0, viewWidth, viewHeight);
+    if (state && Array.isArray(state.fish) && typeof CatFish.drawing.drawFish === "function") {
+      for (const fish of state.fish) {
+        CatFish.drawing.drawFish(ctx, fish);
+      }
+    }
     if (state && typeof CatFish.drawing.drawCat === "function") {
       CatFish.drawing.drawCat(ctx, state.cat);
+    }
+  }
+
+  // Обновляет надпись счётчика, только когда счёт изменился.
+  function syncScore() {
+    if (!scoreEl || !state || state.score === lastScore) {
+      return;
+    }
+    lastScore = state.score;
+    scoreEl.textContent = "Съедено: " + state.score;
+  }
+
+  // Единая обработка нажатия мышью и касанием: выбор рыбки по координатам.
+  function pointerDown(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    if (typeof CatFish.game.selectFish === "function") {
+      CatFish.game.selectFish(x, y);
     }
   }
 
@@ -48,6 +74,7 @@
 
     update(deltaTime);
     render();
+    syncScore();
 
     window.requestAnimationFrame(frame);
   }
@@ -55,6 +82,7 @@
   function init() {
     canvas = document.getElementById("game-canvas");
     ctx = canvas.getContext("2d");
+    scoreEl = document.getElementById("score");
 
     viewWidth = window.innerWidth;
     viewHeight = window.innerHeight;
@@ -62,6 +90,7 @@
 
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
+    canvas.addEventListener("pointerdown", pointerDown);
 
     lastTime = performance.now();
     window.requestAnimationFrame(frame);

@@ -61,6 +61,22 @@
   const EAR_TWITCH_SPEED = 0.7;
   const EAT_SPEED = 3.5;
 
+  // Размеры рыбки в CSS-пикселях (вид сверху, нос направлен по оси +X).
+  const FISH_BODY_RADIUS_X = 12;
+  const FISH_BODY_RADIUS_Y = 7.5;
+  const FISH_TAIL_LENGTH = 9;
+  const FISH_TAIL_SPREAD = 7;
+  const FISH_FIN_LENGTH = 5;
+  const FISH_FIN_SPREAD = 4;
+
+  // Цвета рыбки: холодный синий, чтобы отличаться от рыжего котика.
+  const COLOR_FISH_BODY = "#5fb4d8";
+  const COLOR_FISH_BELLY = "#bfe6f2";
+  const COLOR_FISH_FIN = "#3f8bab";
+  const COLOR_FISH_OUTLINE = "#2f6f8c";
+  const COLOR_FISH_EYE = "#173042";
+  const COLOR_FISH_EYE_SHINE = "#ffffff";
+
   // Режим движения для анимации лап: 0 — покой, 1 — прогулка, 2 — бег.
   // Во время паузы прогулки (moving === false) лапки стоят на месте.
   function getGait(cat) {
@@ -354,5 +370,88 @@
     ctx.restore();
   }
 
+  // Рисует рыбку сверху. fish: { x, y, angle, scale }. Состояние не изменяет.
+  // scale уменьшается во время поедания (1 — обычный размер).
+  function drawFish(ctx, fish) {
+    const scale = fish.scale === undefined ? 1 : fish.scale;
+    ctx.save();
+    ctx.translate(fish.x, fish.y);
+    ctx.rotate(fish.angle);
+    ctx.scale(scale, scale);
+
+    // Мягкая тень под рыбкой.
+    ctx.save();
+    ctx.translate(1, 3);
+    ctx.scale(1, 0.55);
+    ctx.beginPath();
+    ctx.arc(0, 0, FISH_BODY_RADIUS_X, 0, Math.PI * 2);
+    ctx.fillStyle = COLOR_SHADOW;
+    ctx.fill();
+    ctx.restore();
+
+    // Хвостовой плавник-«вилка» позади тела.
+    ctx.beginPath();
+    ctx.moveTo(-FISH_BODY_RADIUS_X + 2, 0);
+    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH, -FISH_TAIL_SPREAD);
+    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH * 0.5, 0);
+    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH, FISH_TAIL_SPREAD);
+    ctx.closePath();
+    ctx.fillStyle = COLOR_FISH_FIN;
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = COLOR_FISH_OUTLINE;
+    ctx.stroke();
+
+    // Боковые плавники по бокам тела.
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(0, side * FISH_BODY_RADIUS_Y * 0.55);
+      ctx.lineTo(-FISH_FIN_LENGTH, side * (FISH_BODY_RADIUS_Y + FISH_FIN_SPREAD));
+      ctx.lineTo(3, side * FISH_BODY_RADIUS_Y * 0.6);
+      ctx.closePath();
+      ctx.fillStyle = COLOR_FISH_FIN;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = COLOR_FISH_OUTLINE;
+      ctx.stroke();
+    }
+
+    // Тело-овал со светлым брюшком.
+    ctx.beginPath();
+    ctx.ellipse(0, 0, FISH_BODY_RADIUS_X, FISH_BODY_RADIUS_Y, 0, 0, Math.PI * 2);
+    ctx.fillStyle = COLOR_FISH_BODY;
+    ctx.fill();
+    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = COLOR_FISH_OUTLINE;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(2, 0, FISH_BODY_RADIUS_X * 0.62, FISH_BODY_RADIUS_Y * 0.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = COLOR_FISH_BELLY;
+    ctx.fill();
+
+    // Пара глаз у головы.
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(FISH_BODY_RADIUS_X * 0.5, side * FISH_BODY_RADIUS_Y * 0.42, 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = COLOR_FISH_EYE;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(
+        FISH_BODY_RADIUS_X * 0.5 - 0.8,
+        side * FISH_BODY_RADIUS_Y * 0.42 - 0.8,
+        0.9,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fillStyle = COLOR_FISH_EYE_SHINE;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   drawing.drawCat = drawCat;
+  drawing.drawFish = drawFish;
 })();
