@@ -38,6 +38,8 @@
       width,
       height,
       cat: {
+        nx: 0.5, // позиция в долях поля по X (0..1), сохраняется между изменениями размера
+        ny: 0.5, // позиция в долях поля по Y (0..1)
         x: width / 2,
         y: height / 2,
         angle: 0,
@@ -45,6 +47,8 @@
         state: "wandering",
         moving: false,
         pauseTimer: 0,
+        targetNx: 0.5, // цель прогулки в долях поля по X
+        targetNy: 0.5, // цель прогулки в долях поля по Y
         targetX: width / 2,
         targetY: height / 2,
         targetFishId: null,
@@ -59,8 +63,32 @@
     return state;
   }
 
+  // Ограничивает значение; при вырожденном (инвертированном) диапазоне
+  // возвращает верхнюю границу, чтобы объект оставался внутри поля.
   function clamp(value, min, max) {
+    if (max < min) {
+      return max;
+    }
     return Math.min(Math.max(value, min), max);
+  }
+
+  // Записывает позицию котика в пикселях и синхронно — в долях поля.
+  // Доли поля остаются неизменными при изменении размера окна.
+  function setCatPosition(x, y) {
+    const cat = state.cat;
+    cat.x = x;
+    cat.y = y;
+    cat.nx = state.width > 0 ? x / state.width : 0;
+    cat.ny = state.height > 0 ? y / state.height : 0;
+  }
+
+  // Записывает цель прогулки котика в пикселях и в долях поля.
+  function setCatTarget(x, y) {
+    const cat = state.cat;
+    cat.targetX = x;
+    cat.targetY = y;
+    cat.targetNx = state.width > 0 ? x / state.width : 0;
+    cat.targetNy = state.height > 0 ? y / state.height : 0;
   }
 
   // Случайное число в диапазоне; при вырожденном диапазоне вернёт нижнюю границу.
@@ -80,8 +108,10 @@
   // Выбирает новую точку прогулки внутри допустимых границ поля.
   function chooseWanderTarget() {
     const margin = catMargin();
-    state.cat.targetX = randomBetween(margin, state.width - margin);
-    state.cat.targetY = randomBetween(margin, state.height - margin);
+    setCatTarget(
+      randomBetween(margin, state.width - margin),
+      randomBetween(margin, state.height - margin),
+    );
   }
 
   // Отступ от краёв поля с учётом размера рыбки; уменьшается на тесном поле.
@@ -117,6 +147,8 @@
       if (isFishPositionFree(x, y)) {
         state.fish.push({
           id: state.nextFishId,
+          nx: x / state.width, // позиция в долях поля, сохраняется при изменении размера
+          ny: y / state.height,
           x,
           y,
           angle: randomBetween(0, Math.PI * 2),
@@ -161,8 +193,7 @@
     const step = WALK_SPEED * deltaTime;
 
     if (distance <= step || distance === 0) {
-      cat.x = cat.targetX;
-      cat.y = cat.targetY;
+      setCatPosition(cat.targetX, cat.targetY);
       cat.moving = false;
       cat.pauseTimer = randomBetween(PAUSE_MIN, PAUSE_MAX);
       return;
@@ -181,8 +212,7 @@
     }
 
     cat.moving = true;
-    cat.x += (dx / distance) * step;
-    cat.y += (dy / distance) * step;
+    setCatPosition(cat.x + (dx / distance) * step, cat.y + (dy / distance) * step);
     cat.angle = turnToward(cat.angle, desiredAngle, maxTurn);
   }
 
@@ -269,8 +299,7 @@
 
     const step = Math.min(CHASE_SPEED * deltaTime, distance);
     cat.moving = true;
-    cat.x += (dx / distance) * step;
-    cat.y += (dy / distance) * step;
+    setCatPosition(cat.x + (dx / distance) * step, cat.y + (dy / distance) * step);
     cat.angle = turnToward(cat.angle, desiredAngle, maxTurn);
   }
 
@@ -341,7 +370,9 @@
     moveTowardTarget(deltaTime);
   }
 
-  // При изменении окна сохраняет кота, цель прогулки и рыбок в допустимых границах.
+  // При изменении окна восстанавливает позиции кота, цели и рыбок из долей поля,
+  // поэтому после сужения и обратного расширения они возвращаются на те же
+  // относительные места. Доли поля при этом не перезаписываются.
   function resize(width, height) {
     if (!state) {
       createState(width, height);
@@ -349,17 +380,19 @@
     }
     state.width = width;
     state.height = height;
-    const margin = catMargin();
-    state.cat.x = clamp(state.cat.x, margin, width - margin);
-    state.cat.y = clamp(state.cat.y, margin, height - margin);
-    state.cat.targetX = clamp(state.cat.targetX, margin, width - margin);
-    state.cat.targetY = clamp(state.cat.targetY, margin, height - margin);
 
-    // Переносит рыбок в допустимые границы поля, сохраняя их список.
-    const fishMarginValue = fishMargin();
+    // Котик и его цель прогулки: пиксели из долей поля, с сохранением видимости.
+    const catM = catMargin();
+    state.cat.x = clamp(state.cat.nx * width, catM, width - catM);
+    state.cat.y = clamp(state.cat.ny * height, catM, height - catM);
+    state.cat.targetX = clamp(state.cat.targetNx * width, catM, width - catM);
+    state.cat.targetY = clamp(state.cat.targetNy * height, catM, height - catM);
+
+    // Рыбки: те же относительные позиции, полностью в пределах поля.
+    const fishM = fishMargin();
     for (const fish of state.fish) {
-      fish.x = clamp(fish.x, fishMarginValue, width - fishMarginValue);
-      fish.y = clamp(fish.y, HUD_SAFE_TOP + fishMarginValue, height - fishMarginValue);
+      fish.x = clamp(fish.nx * width, fishM, width - fishM);
+      fish.y = clamp(fish.ny * height, HUD_SAFE_TOP + fishM, height - fishM);
     }
   }
 
