@@ -119,7 +119,7 @@
     const tip = [TAIL_BASE_X - TAIL_LENGTH, swing];
 
     const segments = TAIL_WIDTHS.length;
-    const points = [base];
+    const points = [{ x: base[0], y: base[1] }];
     for (let i = 1; i <= segments; i += 1) {
       points.push(bezierPoint(base, ctrl, tip, i / segments));
     }

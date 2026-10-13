@@ -7,9 +7,13 @@
   // Настройки прогулки.
   const WALK_SPEED = 35; // скорость неспешной прогулки, CSS-пиксель/с
   const TURN_SPEED = 7; // скорость поворота к направлению движения, радиан/с
+  const TURN_THRESHOLD = Math.PI / 4; // порог 45°: сначала поворот на месте, затем ходьба
   const PAUSE_MIN = 0.5; // минимальная пауза между точками, с
   const PAUSE_MAX = 1.5; // максимальная пауза между точками, с
-  const CAT_RADIUS = 46; // половина габарита котика для границ поля, CSS-пиксель
+  // Радиус описанной окружности котика для границ поля и размещения рыбок.
+  // Учитывает весь рисунок при любом повороте: усы с вытянутой вперёд головой
+  // во время поедания доходят до ~51,3 px от центра, поэтому с запасом — 52.
+  const CAT_RADIUS = 52; // CSS-пиксель
   const ANIM_SPEED = 2.2; // рост фазы анимации (хвост, лапки), радиан/с
 
   let state = null;
@@ -86,10 +90,22 @@
       return;
     }
 
+    const desiredAngle = Math.atan2(dy, dx);
+    const maxTurn = TURN_SPEED * deltaTime;
+    let diff = desiredAngle - cat.angle;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+
+    // Если до цели больше 45°, сначала разворачиваемся на месте, без хода боком.
+    if (Math.abs(diff) > TURN_THRESHOLD) {
+      cat.moving = false;
+      cat.angle = turnToward(cat.angle, desiredAngle, maxTurn);
+      return;
+    }
+
     cat.moving = true;
     cat.x += (dx / distance) * step;
     cat.y += (dy / distance) * step;
-    cat.angle = turnToward(cat.angle, Math.atan2(dy, dx), TURN_SPEED * deltaTime);
+    cat.angle = turnToward(cat.angle, desiredAngle, maxTurn);
   }
 
   // Обновляет прогулку: движение к точке, пауза, затем новая точка.
