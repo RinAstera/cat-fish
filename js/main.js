@@ -9,6 +9,7 @@
   let viewWidth = 0;
   let viewHeight = 0;
   let lastTime = 0;
+  let state = null;
 
   // Настроить размер canvas под окно с учётом devicePixelRatio.
   function resizeCanvas() {
@@ -36,7 +37,9 @@
 
   function render() {
     ctx.clearRect(0, 0, viewWidth, viewHeight);
-    // Рисование котика и рыбок добавится в следующих задачах.
+    if (state && typeof CatFish.drawing.drawCat === "function") {
+      CatFish.drawing.drawCat(ctx, state.cat);
+    }
   }
 
   function frame(timestamp) {
@@ -52,6 +55,10 @@
   function init() {
     canvas = document.getElementById("game-canvas");
     ctx = canvas.getContext("2d");
+
+    viewWidth = window.innerWidth;
+    viewHeight = window.innerHeight;
+    state = CatFish.game.createState(viewWidth, viewHeight);
 
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
