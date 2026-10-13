@@ -62,11 +62,12 @@
   const EAT_SPEED = 3.5;
 
   // Режим движения для анимации лап: 0 — покой, 1 — прогулка, 2 — бег.
+  // Во время паузы прогулки (moving === false) лапки стоят на месте.
   function getGait(cat) {
     if (cat.state === "chasing") {
       return GAIT_RUN;
     }
-    if (cat.state === "wandering") {
+    if (cat.state === "wandering" && cat.moving) {
       return GAIT_WALK;
     }
     return GAIT_IDLE;
