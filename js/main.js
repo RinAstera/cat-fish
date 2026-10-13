@@ -12,6 +12,7 @@
   let state = null;
   let scoreEl = null;
   let lastScore = -1;
+  let elapsed = 0; // накопленное время анимации фона, с (по deltaTime)
 
   // Настроить размер canvas под окно с учётом devicePixelRatio.
   function resizeCanvas() {
@@ -35,10 +36,19 @@
     if (typeof CatFish.game.update === "function") {
       CatFish.game.update(deltaTime);
     }
+    if (state && typeof CatFish.drawing.updateRipples === "function") {
+      CatFish.drawing.updateRipples(state.cat, deltaTime);
+    }
   }
 
   function render() {
     ctx.clearRect(0, 0, viewWidth, viewHeight);
+    if (typeof CatFish.drawing.drawBackground === "function") {
+      CatFish.drawing.drawBackground(ctx, viewWidth, viewHeight, elapsed);
+    }
+    if (typeof CatFish.drawing.drawRipples === "function") {
+      CatFish.drawing.drawRipples(ctx);
+    }
     if (state && Array.isArray(state.fish) && typeof CatFish.drawing.drawFish === "function") {
       for (const fish of state.fish) {
         CatFish.drawing.drawFish(ctx, fish);
@@ -71,6 +81,7 @@
   function frame(timestamp) {
     const deltaTime = Math.min((timestamp - lastTime) / 1000, MAX_DELTA);
     lastTime = timestamp;
+    elapsed += deltaTime;
 
     update(deltaTime);
     render();

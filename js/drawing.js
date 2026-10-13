@@ -69,13 +69,56 @@
   const FISH_FIN_LENGTH = 5;
   const FISH_FIN_SPREAD = 4;
 
-  // Цвета рыбки: холодный синий, чтобы отличаться от рыжего котика.
-  const COLOR_FISH_BODY = "#5fb4d8";
-  const COLOR_FISH_BELLY = "#bfe6f2";
-  const COLOR_FISH_FIN = "#3f8bab";
-  const COLOR_FISH_OUTLINE = "#2f6f8c";
+  // Цвета рыбки: серебристо-белое тело с тонким тёмным контуром,
+  // чтобы не сливаться с бирюзовой водой и рыжим котиком.
+  const COLOR_FISH_BODY = "#eef3f6";
+  const COLOR_FISH_BELLY = "#ffffff";
+  const COLOR_FISH_FIN = "#cdd9e1";
+  const COLOR_FISH_OUTLINE = "#2b3a44";
   const COLOR_FISH_EYE = "#173042";
   const COLOR_FISH_EYE_SHINE = "#ffffff";
+
+  // Фон-мелководье: мягкий градиент бирюзовых и синих оттенков.
+  const WATER_COLOR_TOP = "#4fb0aa";
+  const WATER_COLOR_MID = "#2f86ab";
+  const WATER_COLOR_BOTTOM = "#1d4f7a";
+
+  // Медленные полупрозрачные волнистые штрихи и блики.
+  const STROKE_COUNT = 16; // число коротких разрозненных волнистых штрихов
+  const STROKE_STEP = 12; // шаг выборки точек штриха, CSS-пиксель (не попиксельно)
+  const HIGHLIGHT_COUNT = 3; // число дрейфующих светлых бликов
+  const HIGHLIGHT_ALPHA = 0.12;
+
+  // Круги на воде под лапками идущего котика.
+  const RIPPLE_LIFE = 0.9; // время жизни круга, с
+  const RIPPLE_INTERVAL = 0.22; // интервал появления кругов при прогулке, с
+  const RIPPLE_INTERVAL_RUN = 0.14; // интервал появления кругов при беге, с
+  const RIPPLE_START_RADIUS = 5; // начальный радиус, CSS-пиксель
+  const RIPPLE_MAX_RADIUS = 26; // максимальный радиус, CSS-пиксель
+  const RIPPLE_ALPHA = 0.5; // начальная прозрачность круга
+  const RIPPLE_FLATTEN = 0.72; // сжатие по вертикали для ощущения поверхности
+
+  // Внутреннее (не игровое) состояние визуальных кругов на воде.
+  const ripples = [];
+  let rippleTimer = 0;
+  let rippleSide = 1;
+
+  // Короткие волнистые штрихи: положение и параметры задаются случайно один раз,
+  // в долях поля, чтобы сохраняться при изменении размера окна.
+  const strokes = [];
+  for (let i = 0; i < STROKE_COUNT; i += 1) {
+    strokes.push({
+      nx: Math.random(), // позиция в долях поля
+      ny: Math.random(),
+      length: 40 + Math.random() * 90, // длина штриха, CSS-пиксель
+      wavelength: 55 + Math.random() * 75, // длина волны, CSS-пиксель
+      amplitude: 3 + Math.random() * 4, // размах, CSS-пиксель
+      speed: 0.15 + Math.random() * 0.35, // скорость появления и смещения
+      phase: Math.random() * Math.PI * 2, // сдвиг фазы
+      alpha: 0.12 + Math.random() * 0.14, // максимальная прозрачность
+      drift: 0.4 + Math.random() * 0.8, // множитель горизонтального дрейфа
+    });
+  }
 
   // Режим движения для анимации лап: 0 — покой, 1 — прогулка, 2 — бег.
   // Во время паузы прогулки (moving === false) лапки стоят на месте.
@@ -452,6 +495,135 @@
     ctx.restore();
   }
 
+  // Медленные светлые блики, плавно дрейфующие по воде.
+  function drawHighlights(ctx, width, height, time) {
+    const base = Math.min(width, height);
+    for (let i = 0; i < HIGHLIGHT_COUNT; i += 1) {
+      const seed = i * 1.7;
+      const cx = width * (0.22 + 0.28 * i) + Math.sin(time * 0.06 + seed) * width * 0.06;
+      const cy = height * (0.28 + 0.2 * i) + Math.cos(time * 0.05 + seed) * height * 0.05;
+      const radius = base * (0.18 + 0.04 * i);
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      glow.addColorStop(0, "rgba(214, 255, 250, " + HIGHLIGHT_ALPHA + ")");
+      glow.addColorStop(1, "rgba(214, 255, 250, 0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Короткие разрозненные волнистые штрихи: у каждого свои длина, положение,
+  // скорость, прозрачность и фаза; плавно появляются и исчезают по времени.
+  function drawWaves(ctx, width, height, time) {
+    ctx.lineCap = "round";
+    ctx.lineWidth = 2;
+    for (const stroke of strokes) {
+      const cycle = time * stroke.speed + stroke.phase;
+      const visibility = Math.max(0, Math.sin(cycle));
+      if (visibility <= 0.01) {
+        continue;
+      }
+      const alpha = stroke.alpha * visibility;
+      const driftX = Math.sin(time * stroke.speed * 0.6 + stroke.phase) * width * 0.04 * stroke.drift;
+      const startX = stroke.nx * width + driftX - stroke.length / 2;
+      const baseY = stroke.ny * height;
+
+      ctx.strokeStyle = "rgba(235, 255, 252, " + alpha.toFixed(3) + ")";
+      ctx.beginPath();
+      for (let x = 0; x <= stroke.length; x += STROKE_STEP) {
+        const px = startX + x;
+        const py = baseY + Math.sin((x / stroke.wavelength) * Math.PI * 2 + cycle * 1.5) * stroke.amplitude;
+        if (x === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.stroke();
+    }
+  }
+
+  // Фон-мелководье: градиент воды, блики и волны. Рисуется первым, под объектами.
+  function drawBackground(ctx, width, height, time) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, WATER_COLOR_TOP);
+    gradient.addColorStop(0.55, WATER_COLOR_MID);
+    gradient.addColorStop(1, WATER_COLOR_BOTTOM);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    drawHighlights(ctx, width, height, time);
+    drawWaves(ctx, width, height, time);
+  }
+
+  // Создаёт круг на воде под очередной лапкой идущего котика.
+  function spawnRipple(cat) {
+    const side = rippleSide;
+    rippleSide = -rippleSide;
+    const localX = -10; // ближе к задним лапкам
+    const localY = side * PAW_OFFSET_Y;
+    const cos = Math.cos(cat.angle);
+    const sin = Math.sin(cat.angle);
+    ripples.push({
+      x: cat.x + localX * cos - localY * sin,
+      y: cat.y + localX * sin + localY * cos,
+      age: 0,
+    });
+  }
+
+  // Обновляет круги на воде: появление при движении и плавное угасание.
+  // Визуальное состояние, игровую логику не затрагивает.
+  function updateRipples(cat, deltaTime) {
+    if (cat.moving) {
+      rippleTimer -= deltaTime;
+      if (rippleTimer <= 0) {
+        spawnRipple(cat);
+        rippleTimer = cat.state === "chasing" ? RIPPLE_INTERVAL_RUN : RIPPLE_INTERVAL;
+      }
+    } else {
+      rippleTimer = 0;
+    }
+
+    for (let i = ripples.length - 1; i >= 0; i -= 1) {
+      ripples[i].age += deltaTime;
+      if (ripples[i].age >= RIPPLE_LIFE) {
+        ripples.splice(i, 1);
+      }
+    }
+  }
+
+  // Рисует круги на воде: радиус растёт, прозрачность убывает с возрастом.
+  function drawRipples(ctx) {
+    ctx.lineWidth = 2;
+    for (const ripple of ripples) {
+      const progress = ripple.age / RIPPLE_LIFE;
+      const radius = RIPPLE_START_RADIUS + progress * RIPPLE_MAX_RADIUS;
+      const alpha = (1 - progress) * RIPPLE_ALPHA;
+
+      ctx.strokeStyle = "rgba(240, 255, 252, " + alpha.toFixed(3) + ")";
+      ctx.beginPath();
+      ctx.ellipse(ripple.x, ripple.y, radius, radius * RIPPLE_FLATTEN, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(240, 255, 252, " + (alpha * 0.6).toFixed(3) + ")";
+      ctx.beginPath();
+      ctx.ellipse(
+        ripple.x,
+        ripple.y,
+        radius * 0.6,
+        radius * 0.6 * RIPPLE_FLATTEN,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+  }
+
   drawing.drawCat = drawCat;
   drawing.drawFish = drawFish;
+  drawing.drawBackground = drawBackground;
+  drawing.drawRipples = drawRipples;
+  drawing.updateRipples = updateRipples;
 })();
