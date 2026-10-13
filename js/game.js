@@ -26,9 +26,19 @@
   const FISH_MAX = 5; // максимум рыбок на поле, включая поедаемую
   const FISH_SPAWN_MIN = 2; // минимальный интервал появления, с
   const FISH_SPAWN_MAX = 4; // максимальный интервал появления, с
-  const FISH_RADIUS = 20; // радиус рыбки для границ и размещения, CSS-пиксель
+  // Радиус описанной окружности рыбки для границ и размещения: покрывает
+  // и нос, и покачивающийся хвост, поэтому рыбка всегда видна целиком.
+  const FISH_RADIUS = 24; // CSS-пиксель
   const FISH_PLACE_ATTEMPTS = 30; // попыток подобрать свободное место
   const HUD_SAFE_TOP = 64; // отступ сверху под интерфейс счётчика, CSS-пиксель
+
+  // Настройки самостоятельного плавания рыбок.
+  const FISH_SPEED_MIN = 15; // минимальная скорость плавания, CSS-пиксель/с
+  const FISH_SPEED_MAX = 25; // максимальная скорость плавания, CSS-пиксель/с
+  const FISH_TURN_SPEED = 0.8; // максимальная кривизна пути (поворот), радиан/с
+  const FISH_TURN_MIN = 0.8; // минимальное время до смены кривизны, с
+  const FISH_TURN_MAX = 2.4; // максимальное время до смены кривизны, с
+  const FISH_PHASE_SPEED = 4; // рост фазы анимации хвоста плывущей рыбки, радиан/с
 
   let state = null;
 
@@ -151,7 +161,11 @@
           ny: y / state.height,
           x,
           y,
-          angle: randomBetween(0, Math.PI * 2),
+          angle: randomBetween(0, Math.PI * 2), // направление движения (нос по +X)
+          speed: randomBetween(FISH_SPEED_MIN, FISH_SPEED_MAX), // своя скорость плавания
+          phase: randomBetween(0, Math.PI * 2), // фаза анимации хвоста
+          turnTimer: randomBetween(FISH_TURN_MIN, FISH_TURN_MAX), // время до смены кривизны
+          turnSpeed: randomBetween(-FISH_TURN_SPEED, FISH_TURN_SPEED), // текущая кривизна пути
           scale: 1,
         });
         state.nextFishId += 1;
@@ -172,6 +186,57 @@
     }
     trySpawnFish();
     state.fishTimer = randomBetween(FISH_SPAWN_MIN, FISH_SPAWN_MAX);
+  }
+
+  // Рыбка замирает, пока она — текущая цель бегущего или поедающего котика.
+  function isFishFrozen(fish) {
+    const cat = state.cat;
+    if (cat.targetFishId !== fish.id) {
+      return false;
+    }
+    return cat.state === "chasing" || cat.state === "eating";
+  }
+
+  // Медленное самостоятельное плавание: рыбка движется со своей скоростью,
+  // плавно меняет кривизну пути, повёрнута по направлению движения и не
+  // выходит за границы поля (с отступом и без захода под интерфейс).
+  function updateFish(fish, deltaTime) {
+    if (isFishFrozen(fish)) {
+      return;
+    }
+
+    fish.phase += FISH_PHASE_SPEED * deltaTime;
+
+    // Понемногу меняем кривизну пути, чтобы направление менялось плавно.
+    fish.turnTimer -= deltaTime;
+    if (fish.turnTimer <= 0) {
+      fish.turnSpeed = randomBetween(-FISH_TURN_SPEED, FISH_TURN_SPEED);
+      fish.turnTimer = randomBetween(FISH_TURN_MIN, FISH_TURN_MAX);
+    }
+    fish.angle += fish.turnSpeed * deltaTime;
+
+    const margin = fishMargin();
+    const minX = margin;
+    const maxX = state.width - margin;
+    const minY = HUD_SAFE_TOP + margin;
+    const maxY = state.height - margin;
+    const step = fish.speed * deltaTime;
+
+    let nextX = fish.x + Math.cos(fish.angle) * step;
+    let nextY = fish.y + Math.sin(fish.angle) * step;
+
+    // У края доворачиваем рыбку к центру поля, чтобы она не «прилипала» к границе.
+    if (nextX < minX || nextX > maxX || nextY < minY || nextY > maxY) {
+      const desiredAngle = Math.atan2((minY + maxY) / 2 - fish.y, (minX + maxX) / 2 - fish.x);
+      fish.angle = turnToward(fish.angle, desiredAngle, FISH_TURN_SPEED * 4 * deltaTime);
+      nextX = fish.x + Math.cos(fish.angle) * step;
+      nextY = fish.y + Math.sin(fish.angle) * step;
+    }
+
+    fish.x = clamp(nextX, minX, maxX);
+    fish.y = clamp(nextY, minY, maxY);
+    fish.nx = state.width > 0 ? fish.x / state.width : 0;
+    fish.ny = state.height > 0 ? fish.y / state.height : 0;
   }
 
   // Плавный поворот к целевому углу с ограничением шага за кадр.
@@ -348,6 +413,11 @@
 
     // Появление рыбок идёт независимо от состояния котика.
     updateFishSpawn(deltaTime);
+
+    // Рыбки плавают сами, кроме выбранной цели (она замирает до поедания).
+    for (const fish of state.fish) {
+      updateFish(fish, deltaTime);
+    }
 
     if (cat.state === "chasing") {
       updateChasing(deltaTime);

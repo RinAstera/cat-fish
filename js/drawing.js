@@ -68,6 +68,7 @@
   const FISH_TAIL_SPREAD = 7;
   const FISH_FIN_LENGTH = 5;
   const FISH_FIN_SPREAD = 4;
+  const FISH_TAIL_SWAY = 3; // размах лёгкого покачивания хвоста при плавании, CSS-пиксель
 
   // Цвета рыбки: серебристо-белое тело с тонким тёмным контуром,
   // чтобы не сливаться с бирюзовой водой и рыжим котиком.
@@ -413,10 +414,12 @@
     ctx.restore();
   }
 
-  // Рисует рыбку сверху. fish: { x, y, angle, scale }. Состояние не изменяет.
-  // scale уменьшается во время поедания (1 — обычный размер).
+  // Рисует рыбку сверху. fish: { x, y, angle, scale, phase }. Состояние не изменяет.
+  // scale уменьшается во время поедания (1 — обычный размер);
+  // phase — время анимации хвоста (растёт в game.js, пока рыбка плывёт).
   function drawFish(ctx, fish) {
     const scale = fish.scale === undefined ? 1 : fish.scale;
+    const phase = fish.phase === undefined ? 0 : fish.phase;
     ctx.save();
     ctx.translate(fish.x, fish.y);
     ctx.rotate(fish.angle);
@@ -432,12 +435,13 @@
     ctx.fill();
     ctx.restore();
 
-    // Хвостовой плавник-«вилка» позади тела.
+    // Хвостовой плавник-«вилка» позади тела; при плавании лёгкое покачивание.
+    const tailSway = Math.sin(phase) * FISH_TAIL_SWAY;
     ctx.beginPath();
     ctx.moveTo(-FISH_BODY_RADIUS_X + 2, 0);
-    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH, -FISH_TAIL_SPREAD);
-    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH * 0.5, 0);
-    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH, FISH_TAIL_SPREAD);
+    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH, -FISH_TAIL_SPREAD + tailSway);
+    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH * 0.5, tailSway * 0.5);
+    ctx.lineTo(-FISH_BODY_RADIUS_X - FISH_TAIL_LENGTH, FISH_TAIL_SPREAD + tailSway);
     ctx.closePath();
     ctx.fillStyle = COLOR_FISH_FIN;
     ctx.fill();
